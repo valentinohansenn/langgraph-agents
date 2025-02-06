@@ -1,101 +1,206 @@
-import Image from "next/image";
+"use client"
+
+import { useRef, useEffect, useState } from "react"
+import axios from "axios"
+import { Button } from "@/components/ui/button"
+import { Card } from "@/components/ui/card"
+import { Textarea } from "@/components/ui/textarea"
+import { Bot, Loader2 } from "lucide-react"
+import { useAnimatedText } from "@/hooks/use-animated-text"
+import { streamText } from "@/lib/action"
+
+interface Message {
+	id: string
+	content: string
+	role: "user" | "assistant"
+	isAnimated?: boolean
+}
 
 export default function Home() {
-  return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-semibold">
-              app/page.tsx
-            </code>
-            .
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
+	const [mounted, setMounted] = useState<boolean>(false)
+	const [messages, setMessages] = useState<Message[]>([])
+	const [displayedText, setDisplayedText] = useState<string>("")
+	const [input, setInput] = useState<string>("")
+	const [isLoading, setIsLoading] = useState<boolean>(false)
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:min-w-44"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
-        </div>
-      </main>
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
-  );
+	const textareaRef = useRef<HTMLTextAreaElement>(null)
+	const animatedText = useAnimatedText(displayedText)
+
+	useEffect(() => {
+		setMounted(true)
+	}, [])
+
+	useEffect(() => {
+		const textarea = textareaRef.current
+		if (textarea) {
+			textarea.style.height = "auto"
+			textarea.style.height = `${textarea.scrollHeight}px`
+		}
+	}, [input])
+
+	if (!mounted) {
+		return null
+	}
+
+	const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+		setInput(e.target.value)
+	}
+
+	const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+		e.preventDefault()
+
+		if (!input.trim()) return
+
+		const query = input.trim()
+
+		// Reset the input field
+		setInput("")
+
+		// Add user message
+		setMessages((prevMessages) => [
+			...prevMessages,
+			{ id: Date.now().toString(), content: query, role: "user" },
+		])
+
+		// Add initial assistant message
+		const assistantMessageId = (Date.now() + 1).toString()
+		setMessages((prevMessages) => [
+			...prevMessages,
+			{
+				id: assistantMessageId,
+				content: "",
+				role: "assistant",
+				isAnimated: true,
+			},
+		])
+
+		setIsLoading(true)
+		setDisplayedText("")
+
+		try {
+			const response = await axios.post(
+				"/api/chat",
+				{ message: query },
+				{ responseType: "text" }
+			)
+
+			// Extract the output from the response
+			const parsedResponse = JSON.parse(response.data)
+			const res = parsedResponse.output
+
+			const { textStream } = await streamText(res)
+
+			let accumulator = ""
+			for await (const textPart of textStream) {
+				accumulator += textPart
+				setDisplayedText(accumulator)
+			}
+
+			setTimeout(() => {
+				setMessages((prevMessages) => {
+					const lastMessage = prevMessages[prevMessages.length - 1]
+					if (lastMessage && lastMessage.role === "assistant") {
+						return prevMessages.map((msg) =>
+							msg.id === lastMessage.id
+								? { ...msg, content: accumulator, isAnimated: false }
+								: msg
+						)
+					}
+					return prevMessages
+				})
+			}, 1500)
+		} catch (error) {
+			console.error("Error:", error)
+			setMessages((prevMessages) => {
+				const lastMessage = prevMessages[prevMessages.length - 1]
+				if (lastMessage && lastMessage.role === "assistant") {
+					return prevMessages.map((msg) =>
+						msg.id === lastMessage.id
+							? {
+									...msg,
+									content: "An error occurred. Please try again.",
+									isAnimated: false,
+							  }
+							: msg
+					)
+				}
+				return prevMessages
+			})
+		} finally {
+			setIsLoading(false)
+			if (textareaRef.current) {
+				textareaRef.current.style.height = "auto"
+			}
+		}
+	}
+
+	const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+		if (e.key === "Enter" && !e.shiftKey) {
+			e.preventDefault()
+			const form = e.currentTarget.form
+			if (form) form.requestSubmit()
+		}
+	}
+
+	return (
+		<div className="flex flex-col h-screen bg-background">
+			<div className="flex-1 overflow-y-auto p-4 space-y-4">
+				{messages.map((message, index) => (
+					<div
+						key={message.id}
+						className={`flex items-center gap-4 ${
+							message.role === "user" ? "justify-end" : "justify-start"
+						}`}
+					>
+						{message.role === "assistant" && (
+							<div className="flex items-center rounded-full border border-primary p-2">
+								<Bot className="h-5 w-5" />
+							</div>
+						)}
+
+						<Card
+							className={`max-w-[80%] p-4 rounded-3xl ${
+								message.role === "user"
+									? "bg-primary text-primary-foreground"
+									: "bg-muted"
+							}`}
+						>
+							{message.role === "assistant" &&
+							message.isAnimated &&
+							index === messages.length - 1 ? (
+								<span key={`{message.id}-{message.content}`}>
+									{animatedText}
+								</span>
+							) : (
+								message.content
+							)}
+						</Card>
+					</div>
+				))}
+			</div>
+
+			<div className="border-t bg-background p-4">
+				<form onSubmit={handleSubmit} className="flex gap-2 items-end">
+					<div className="flex-1">
+						<Textarea
+							ref={textareaRef}
+							value={input}
+							onChange={handleInputChange}
+							onKeyDown={handleKeyDown}
+							placeholder="Type your message..."
+							className="min-h-[44px] max-h-[200px] resize-auto"
+							rows={1}
+						/>
+					</div>
+					<Button
+						type="submit"
+						disabled={isLoading || !input.trim()}
+						className="h-[44px]"
+					>
+						{isLoading ? <Loader2 className="animate-spin" /> : "Send"}
+					</Button>
+				</form>
+			</div>
+		</div>
+	)
 }
