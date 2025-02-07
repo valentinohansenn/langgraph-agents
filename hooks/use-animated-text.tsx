@@ -24,7 +24,7 @@ export function useAnimatedText(text: string) {
 
 		const controls = animate(startingCursor, textLength, {
 			// Improved animation settings
-			duration: Math.min(0.05 * textLength, 2), // Dynamic duration with a cap
+			duration: Math.min(0.05 * textLength, 1), // Dynamic duration with a cap
 			ease: "linear", // Smoother typing effect
 			type: "tween", // Ensures consistent animation
 			onUpdate(latest) {

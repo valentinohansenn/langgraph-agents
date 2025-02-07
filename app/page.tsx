@@ -84,6 +84,8 @@ export default function Home() {
 				{ responseType: "text" }
 			)
 
+			console.log({ response })
+
 			// Extract the output from the response
 			const parsedResponse = JSON.parse(response.data)
 			const res = parsedResponse.output
